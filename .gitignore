@@ -1,0 +1,30 @@
+# Configuração pessoal do AWS CLI (profile e região de cada pessoa)
+.aws-profile
+.aws-region
+
+# Variáveis de ambiente e credenciais
+.env
+.env.*
+*.pem
+
+# Logs gerados pelos scripts (deploy.log, destroy.log, etc.)
+*.log
+
+# Artefatos de build e dependências
+node_modules/
+*.zip
+.aws-sam/
+
+# Pastas e arquivos temporários
+.tmp*/
+tmp/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.idea/
+*.swp
+*~
