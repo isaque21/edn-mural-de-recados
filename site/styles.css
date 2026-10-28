@@ -1,0 +1,161 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #f2f4f8;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+header {
+  background: #232f3e;
+  color: #fff;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0 0 4px;
+}
+
+header p {
+  margin: 0;
+  color: #ff9900;
+}
+
+main {
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin: 12px 0 4px;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  margin-top: 16px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #ff9900;
+  color: #111;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #ec8c00;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button.secundario {
+  margin-top: 0;
+  background: #e2e8f0;
+}
+
+button.secundario:hover {
+  background: #cbd5e1;
+}
+
+.titulo-lista {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.titulo-lista h2 {
+  margin: 0;
+}
+
+#status {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+}
+
+#status.ok {
+  color: #15803d;
+}
+
+#status.erro {
+  color: #b91c1c;
+}
+
+#lista-recados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#lista-recados li {
+  border-top: 1px solid #e5e7eb;
+  padding: 12px 0;
+}
+
+#lista-recados li:first-child {
+  border-top: none;
+}
+
+.recado-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.recado-data {
+  color: #6b7280;
+}
+
+.recado-mensagem {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.vazio {
+  color: #6b7280;
+  font-style: italic;
+}
+
+footer {
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.85em;
+  padding: 16px;
+}

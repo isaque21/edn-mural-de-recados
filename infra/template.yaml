@@ -1,0 +1,283 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Lab Escola da Nuvem - Mural de Recados
+  (S3 + CloudFront + API Gateway + Lambda + DynamoDB)
+
+# O código real da Lambda (lambda/index.mjs) é publicado pelo infra/deploy.sh
+# depois que a stack é criada. O código inline abaixo é só um placeholder.
+
+Resources:
+  # ---------------------------------------------------------------- DynamoDB
+  TabelaRecados:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-recados"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # ------------------------------------------------------------------ Lambda
+  LogGroupLambda:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}"
+      RetentionInDays: 7
+
+  RoleLambda:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role da Lambda do Mural de Recados
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroupLambda.Arn
+        - PolicyName: dynamodb-recados
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:PutItem
+                Resource: !GetAtt TabelaRecados.Arn
+
+  FuncaoLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref AWS::StackName
+      Description: API do Mural de Recados
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt RoleLambda.Arn
+      MemorySize: 128
+      Timeout: 10
+      LoggingConfig:
+        LogGroup: !Ref LogGroupLambda
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TabelaRecados
+          ALLOWED_ORIGIN: !Sub "https://${Distribuicao.DomainName}"
+      Code:
+        ZipFile: |
+          exports.handler = async () => ({
+            statusCode: 503,
+            body: JSON.stringify({ erro: "Codigo da Lambda ainda nao publicado." })
+          });
+
+  PermissaoApiInvocarLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FuncaoLambda
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/*/recados"
+
+  # ------------------------------------------------------------- API Gateway
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
+      Description: API do Mural de Recados
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  RecursoRecados:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !GetAtt Api.RootResourceId
+      PathPart: recados
+
+  MetodoGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref RecursoRecados
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FuncaoLambda.Arn}/invocations"
+
+  MetodoPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref RecursoRecados
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FuncaoLambda.Arn}/invocations"
+
+  # Responde o preflight de CORS sem chamar a Lambda.
+  MetodoOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref RecursoRecados
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'https://${Distribuicao.DomainName}'"
+            ResponseTemplates:
+              application/json: ""
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # Erros gerados pelo próprio API Gateway (throttling, rota inexistente) também levam CORS.
+  RespostaGateway4xx:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'https://${Distribuicao.DomainName}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type'"
+
+  RespostaGateway5xx:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'https://${Distribuicao.DomainName}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type'"
+
+  DeploymentApi:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - MetodoGet
+      - MetodoPost
+      - MetodoOptions
+      - RespostaGateway4xx
+      - RespostaGateway5xx
+    Properties:
+      RestApiId: !Ref Api
+
+  StageProd:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref Api
+      DeploymentId: !Ref DeploymentApi
+      StageName: prod
+      MethodSettings:
+        # Limite simples contra abuso: 10 req/s, rajada de 20.
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          ThrottlingRateLimit: 10
+          ThrottlingBurstLimit: 20
+
+  # -------------------------------------------------------------- S3 + CDN
+  BucketSite:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        Description: Acesso do CloudFront ao bucket do Mural de Recados
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribuicao:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Mural de Recados - Escola da Nuvem
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: s3-site
+            DomainName: !GetAtt BucketSite.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: s3-site
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Política gerenciada "Managed-CachingOptimized"
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+  PoliticaBucketSite:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketSite
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${BucketSite.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribuicao}"
+
+Outputs:
+  SiteUrl:
+    Value: !Sub "https://${Distribuicao.DomainName}"
+  ApiUrl:
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${StageProd}"
+  BucketName:
+    Value: !Ref BucketSite
+  DistributionId:
+    Value: !Ref Distribuicao
+  FunctionName:
+    Value: !Ref FuncaoLambda
+  TableName:
+    Value: !Ref TabelaRecados
